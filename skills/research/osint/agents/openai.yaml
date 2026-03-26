@@ -1,0 +1,7 @@
+interface:
+  display_name: "OSINT Research"
+  short_description: "Structured recurring open-source research"
+  default_prompt: "Use $osint to research a person, company, topic, or event and save the findings in a structured report if file output is useful."
+
+policy:
+  allow_implicit_invocation: true
