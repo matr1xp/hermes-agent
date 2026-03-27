@@ -138,6 +138,7 @@ class WhatsAppAdapter(BasePlatformAdapter):
             get_hermes_dir("platforms/whatsapp/session", "whatsapp/session")
         ))
         self._reply_prefix: Optional[str] = config.extra.get("reply_prefix")
+        self._allowed_users: Optional[str] = config.extra.get("allowed_users")
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._bridge_log_fh = None
         self._bridge_log: Optional[Path] = None
@@ -251,6 +252,8 @@ class WhatsAppAdapter(BasePlatformAdapter):
             bridge_env = os.environ.copy()
             if self._reply_prefix is not None:
                 bridge_env["WHATSAPP_REPLY_PREFIX"] = self._reply_prefix
+            if self._allowed_users is not None:
+                bridge_env["WHATSAPP_ALLOWED_USERS"] = self._allowed_users
 
             self._bridge_process = subprocess.Popen(
                 [
