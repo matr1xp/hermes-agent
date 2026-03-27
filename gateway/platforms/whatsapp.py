@@ -180,6 +180,7 @@ class WhatsAppAdapter(BasePlatformAdapter):
         self._group_policy = str(config.extra.get("group_policy") or os.getenv("WHATSAPP_GROUP_POLICY", "open")).strip().lower()
         self._group_allow_from = self._coerce_allow_list(config.extra.get("group_allow_from") or config.extra.get("groupAllowFrom"))
         self._mention_patterns = self._compile_mention_patterns()
+        self._allowed_users: Optional[str] = config.extra.get("allowed_users")
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._bridge_log_fh = None
         self._bridge_log: Optional[Path] = None
@@ -438,6 +439,8 @@ class WhatsAppAdapter(BasePlatformAdapter):
             bridge_env = os.environ.copy()
             if self._reply_prefix is not None:
                 bridge_env["WHATSAPP_REPLY_PREFIX"] = self._reply_prefix
+            if self._allowed_users is not None:
+                bridge_env["WHATSAPP_ALLOWED_USERS"] = self._allowed_users
 
             self._bridge_process = subprocess.Popen(
                 [
