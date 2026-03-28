@@ -566,6 +566,14 @@ def load_gateway_config() -> GatewayConfig:
                     if isinstance(frc, list):
                         frc = ",".join(str(v) for v in frc)
                     os.environ["TELEGRAM_FREE_RESPONSE_CHATS"] = str(frc)
+            
+            # WhatsApp settings → env vars (env vars take precedence)
+            whatsapp_cfg = yaml_cfg.get("whatsapp", {})
+            if isinstance(whatsapp_cfg, dict):
+                if "require_mention" in whatsapp_cfg and not os.getenv("WHATSAPP_REQUIRE_MENTION"):
+                    os.environ["WHATSAPP_REQUIRE_MENTION"] = str(whatsapp_cfg["require_mention"]).lower()
+                if "mention_prefix" in whatsapp_cfg and not os.getenv("WHATSAPP_MENTION_PREFIX"):
+                    os.environ["WHATSAPP_MENTION_PREFIX"] = whatsapp_cfg["mention_prefix"]
     except Exception as e:
         logger.warning(
             "Failed to process config.yaml — falling back to .env / gateway.json values. "
