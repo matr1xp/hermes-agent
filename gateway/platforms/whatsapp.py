@@ -142,8 +142,16 @@ class WhatsAppAdapter(BasePlatformAdapter):
         self._reply_prefix: Optional[str] = config.extra.get("reply_prefix")
         self._mention_patterns = self._compile_mention_patterns()
         self._allowed_users: Optional[str] = config.extra.get("allowed_users")
-        self._require_mention: bool = config.extra.get("require_mention", False)
-        self._mention_prefix: str = config.extra.get("mention_prefix", "@hermes")
+        # Read require_mention from config or environment variable
+        self._require_mention: bool = config.extra.get(
+            "require_mention",
+            os.getenv("WHATSAPP_REQUIRE_MENTION", "false").lower() in ("true", "1", "yes")
+        )
+        # Read mention_prefix from config or environment variable
+        self._mention_prefix: str = config.extra.get(
+            "mention_prefix",
+            os.getenv("WHATSAPP_MENTION_PREFIX", "@hermes")
+        )
         self._bot_jid: Optional[str] = None  # Will be set when we know our own JID
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._bridge_log_fh = None
