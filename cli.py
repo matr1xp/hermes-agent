@@ -1259,6 +1259,30 @@ def _cprint(text: str):
     """
     _pt_print(_PT_ANSI(text))
 
+def _render_markdown_with_glow(markdown_text: str) -> str:
+    """Render Markdown text through glow for beautiful terminal formatting.
+    
+    Pipes Markdown through glow and returns ANSI-formatted output.
+    Falls back to plain text if glow is not available.
+    """
+    import subprocess
+    
+    try:
+        result = subprocess.run(
+            ["glow", "-s", "dark", "-"],
+            input=markdown_text,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            # glow failed, return original text
+            return markdown_text
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        # glow not available or error, return original text
+        return markdown_text
 
 # ---------------------------------------------------------------------------
 # File-drop / local attachment detection — extracted as pure helpers for tests.
@@ -1854,8 +1878,11 @@ class HermesCLI:
 
         self.verbose = verbose if verbose is not None else (self.tool_progress_mode == "verbose")
         
+        # use_glow: render responses through glow for Markdown formatting (disables streaming)
+        self.use_glow = CLI_CONFIG["display"].get("use_glow", False)
         # streaming: stream tokens to the terminal as they arrive (display.streaming in config.yaml)
-        self.streaming_enabled = CLI_CONFIG["display"].get("streaming", False)
+        # Disabled when use_glow is enabled since glow needs complete text
+        self.streaming_enabled = CLI_CONFIG["display"].get("streaming", False) and not self.use_glow
         self.final_response_markdown = str(
             CLI_CONFIG["display"].get("final_response_markdown", "strip")
         ).strip().lower() or "strip"
@@ -8660,6 +8687,12 @@ class HermesCLI:
                     # Response was already streamed token-by-token with box framing;
                     # _flush_stream() already closed the box. Skip Rich Panel.
                     pass
+                elif self.use_glow:
+                    # Render response through glow for beautiful Markdown formatting
+                    _cprint(f"\n{_GOLD}╭─{label}{'─' * (shutil.get_terminal_size().columns - 2 - len(label))}╮{_RST}")
+                    rendered = _render_markdown_with_glow(response)
+                    _cprint(rendered)
+                    _cprint(f"{_GOLD}╰{'─' * (shutil.get_terminal_size().columns - 2)}╯{_RST}")
                 else:
                     _chat_console = ChatConsole()
                     _chat_console.print(Panel(
