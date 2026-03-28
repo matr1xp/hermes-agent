@@ -766,6 +766,14 @@ def load_gateway_config() -> GatewayConfig:
                 if "dm_mention_threads" in matrix_cfg and not os.getenv("MATRIX_DM_MENTION_THREADS"):
                     os.environ["MATRIX_DM_MENTION_THREADS"] = str(matrix_cfg["dm_mention_threads"]).lower()
 
+            
+            # WhatsApp settings → env vars (env vars take precedence)
+            whatsapp_cfg = yaml_cfg.get("whatsapp", {})
+            if isinstance(whatsapp_cfg, dict):
+                if "require_mention" in whatsapp_cfg and not os.getenv("WHATSAPP_REQUIRE_MENTION"):
+                    os.environ["WHATSAPP_REQUIRE_MENTION"] = str(whatsapp_cfg["require_mention"]).lower()
+                if "mention_prefix" in whatsapp_cfg and not os.getenv("WHATSAPP_MENTION_PREFIX"):
+                    os.environ["WHATSAPP_MENTION_PREFIX"] = whatsapp_cfg["mention_prefix"]
     except Exception as e:
         logger.warning(
             "Failed to process config.yaml — falling back to .env / gateway.json values. "
