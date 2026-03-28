@@ -139,6 +139,9 @@ class WhatsAppAdapter(BasePlatformAdapter):
         ))
         self._reply_prefix: Optional[str] = config.extra.get("reply_prefix")
         self._allowed_users: Optional[str] = config.extra.get("allowed_users")
+        self._require_mention: bool = config.extra.get("require_mention", False)
+        self._mention_prefix: str = config.extra.get("mention_prefix", "@hermes")
+        self._bot_jid: Optional[str] = None  # Will be set when we know our own JID
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._bridge_log_fh = None
         self._bridge_log: Optional[Path] = None
@@ -334,9 +337,11 @@ class WhatsAppAdapter(BasePlatformAdapter):
                     print(f"[{self.name}]   Bridge log: {self._bridge_log}")
                     print(f"[{self.name}]   If session expired, re-pair: hermes whatsapp")
             
-            # Create a persistent HTTP session for all bridge communication
-            self._http_session = aiohttp.ClientSession()
-
+            # Extract bot JID from health endpoint for mention checking
+            if data.get("botJid"):
+                self._bot_jid = data["botJid"]
+                print(f"[{self.name}] Bot JID: {self._bot_jid}")
+            
             # Start message polling task
             self._poll_task = asyncio.create_task(self._poll_messages())
             
@@ -715,6 +720,25 @@ class WhatsAppAdapter(BasePlatformAdapter):
                 user_id=data.get("senderId"),
                 user_name=data.get("senderName"),
             )
+            
+            # Check if bot should respond to this group message
+            # In groups, only respond when mentioned (if require_mention is enabled)
+            if is_group and self._require_mention:
+                # Check if the bot was actually mentioned in the message
+                # WhatsApp provides mentionedJids array when someone is mentioned
+                mentioned_jids = data.get("mentionedJids", [])
+                
+                # Check if bot JID is in the mentioned list
+                bot_mentioned = self._bot_jid and self._bot_jid in mentioned_jids
+                
+                # Fallback: also check if message starts with mention prefix as plain text
+                # (for users who type @Ophelia manually without using WhatsApp's mention feature)
+                body = data.get("body", "") or ""
+                text_mentioned = body.strip().startswith(self._mention_prefix)
+                
+                if not (bot_mentioned or text_mentioned):
+                    # Bot not mentioned, skip this message
+                    return None
             
             # Download media URLs to the local cache so agent tools
             # can access them reliably regardless of URL expiration.

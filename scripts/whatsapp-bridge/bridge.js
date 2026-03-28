@@ -273,15 +273,24 @@ async function startSocket() {
       let hasMedia = false;
       let mediaType = "";
       const mediaUrls = [];
+      const mentionedJids = [];
 
       if (msg.message.conversation) {
         body = msg.message.conversation;
       } else if (msg.message.extendedTextMessage?.text) {
         body = msg.message.extendedTextMessage.text;
+        // Extract mentioned JIDs from extendedTextMessage
+        if (msg.message.extendedTextMessage.mentionedJid) {
+          mentionedJids.push(...msg.message.extendedTextMessage.mentionedJid);
+        }
       } else if (msg.message.imageMessage) {
         body = msg.message.imageMessage.caption || "";
         hasMedia = true;
         mediaType = "image";
+        // Extract mentioned JIDs from image messages
+        if (msg.message.imageMessage.mentionedJid) {
+          mentionedJids.push(...msg.message.imageMessage.mentionedJid);
+        }
         try {
           const buf = await downloadMediaMessage(
             msg,
@@ -443,6 +452,7 @@ async function startSocket() {
         mediaType,
         mediaUrls,
         timestamp: msg.messageTimestamp,
+        mentionedJids, // Include mention information for require_mention feature
       };
 
       messageQueue.push(event);
@@ -666,6 +676,7 @@ app.get("/health", (req, res) => {
     status: connectionState,
     queueLength: messageQueue.length,
     uptime: process.uptime(),
+    botJid: sock?.user?.id || null, // Include bot's JID for mention checking
   });
 });
 
