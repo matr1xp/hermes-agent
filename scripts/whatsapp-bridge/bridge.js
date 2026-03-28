@@ -734,6 +734,7 @@ app.get("/health", (req, res) => {
     queueLength: messageQueue.length,
     uptime: process.uptime(),
     botJid: sock?.user?.id || null, // Include bot's JID for mention checking
+    botLid: sock?.user?.lid || null, // Include bot's LID (used in @mentions)
   });
 });
 
