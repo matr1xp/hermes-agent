@@ -4755,6 +4755,21 @@ class HermesCLI:
 
         if not silent:
             print("(^_^)v New session started!")
+            # Display OS/machine info
+            try:
+                import subprocess
+                detect_script = os.path.expanduser("~/bin/detect_os.sh")
+                if os.path.exists(detect_script):
+                    result = subprocess.run(
+                        [detect_script],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.stdout.strip():
+                        print(f"  {result.stdout.strip()}")
+            except Exception:
+                pass
 
     def _handle_resume_command(self, cmd_original: str) -> None:
         """Handle /resume <session_id_or_title> — switch to a previous session mid-conversation."""

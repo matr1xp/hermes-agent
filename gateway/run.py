@@ -5066,6 +5066,7 @@ class GatewayRunner:
         users can immediately see if context detection went wrong (e.g.
         local models falling to the 128K default).
         """
+        import socket
         from agent.model_metadata import get_model_context_length, DEFAULT_FALLBACK_CONTEXT
 
         model = _resolve_gateway_model()
@@ -5133,7 +5134,14 @@ class GatewayRunner:
         else:
             ctx_display = str(context_length)
 
+        # Get machine hostname
+        try:
+            hostname = socket.gethostname()
+        except Exception:
+            hostname = "unknown"
+
         lines = [
+            f"◆ Machine: {hostname}",
             f"◆ Model: `{model}`",
             f"◆ Provider: {provider or 'openrouter'}",
             f"◆ Context: {ctx_display} tokens ({ctx_source})",
