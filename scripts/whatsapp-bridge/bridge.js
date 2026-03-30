@@ -149,6 +149,12 @@ function buildLidMap() {
 }
 let lidToPhone = buildLidMap();
 
+// Reload LID map on-demand when encountering unknown LIDs
+function reloadLidMap() {
+  lidToPhone = buildLidMap();
+  return lidToPhone;
+}
+
 const logger = pino({ level: "warn" });
 
 // Message queue for polling
@@ -267,7 +273,22 @@ async function startSocket() {
       const senderNumber = senderId.replace(/@.*/, "");
 
       // Resolve LID to phone number for allowlist checking
-      const resolvedSenderNumber = lidToPhone[senderNumber] || senderNumber;
+      let resolvedSenderNumber = lidToPhone[senderNumber] || senderNumber;
+
+      // If LID not found in cache (resolved to same value), reload the map dynamically
+      if (!lidToPhone[senderNumber]) {
+        if (WHATSAPP_DEBUG)
+          console.log(
+            `[bridge] LID ${senderNumber} not in cache, reloading map...`,
+          );
+        reloadLidMap();
+        resolvedSenderNumber = lidToPhone[senderNumber] || senderNumber;
+        if (WHATSAPP_DEBUG)
+          console.log(
+            `[bridge] After reload: resolved=${resolvedSenderNumber}`,
+          );
+      }
+
       if (WHATSAPP_DEBUG) {
         console.log(
           `[bridge] senderId=${senderId}, senderNumber=${senderNumber}, resolved=${resolvedSenderNumber}`,
