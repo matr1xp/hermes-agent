@@ -360,6 +360,7 @@ class WhatsAppAdapter(BasePlatformAdapter):
                 print(f"[{self.name}] Bot LID: {self._bot_lid}")
             
             # Start message polling task
+            self._http_session = aiohttp.ClientSession()
             self._poll_task = asyncio.create_task(self._poll_messages())
             
             self._mark_connected()
