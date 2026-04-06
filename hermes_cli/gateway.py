@@ -2566,6 +2566,29 @@ _PLATFORMS = [
         ],
     },
     {
+        "key": "imessage",
+        "label": "iMessage (macOS)",
+        "emoji": "💬",
+        "token_var": None,  # No token, uses macOS Messages.app
+        "setup_instructions": [
+            "1. Ensure you're on macOS with Messages.app signed in",
+            "2. Install imsg CLI: brew install steipete/tap/imsg",
+            "3. Grant Full Disk Access to Terminal (System Settings → Privacy → Full Disk Access)",
+            "4. Grant Automation permission for Messages.app when prompted",
+            "5. Test: run 'imsg chats --limit 5' to verify access",
+        ],
+        "vars": [
+            {"name": "IMESSAGE_ALLOWED_USERS", "prompt": "Allowed contact identifiers (comma-separated phone numbers or emails)", "password": False,
+             "is_allowlist": True,
+             "help": "Only messages from these contacts will be processed. Use phone numbers or Apple ID emails."},
+            {"name": "IMESSAGE_HOME_CHANNEL", "prompt": "Home channel (phone number or email for cron/notification delivery, or empty)", "password": False,
+             "help": "Contact to deliver cron job results and notifications to."},
+            {"name": "IMESSAGE_POLL_INTERVAL", "prompt": "Poll interval in seconds (default: 2)", "password": False,
+             "help": "How often to check for new messages. Lower = more responsive but higher CPU usage."},
+        ],
+        "requires_macos": True,
+    },
+    {
         "key": "dingtalk",
         "label": "DingTalk",
         "emoji": "💬",

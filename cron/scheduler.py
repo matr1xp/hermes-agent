@@ -337,6 +337,7 @@ def _deliver_result(job: dict, content: str, adapters=None, loop=None) -> Option
         "sms": Platform.SMS,
         "bluebubbles": Platform.BLUEBUBBLES,
         "qqbot": Platform.QQBOT,
+        "imessage": Platform.IMESSAGE,
     }
 
     # Optionally wrap the content with a header/footer so the user knows this

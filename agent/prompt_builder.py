@@ -396,6 +396,12 @@ PLATFORM_HINTS = {
         "in your response. Images (.jpg, .png, .webp) are uploaded and displayed "
         "inline, audio files as voice messages, and other files as attachments."
     ),
+    "imessage": (
+        "You are communicating via iMessage on macOS. Use plain text — markdown "
+        "formatting does not render properly. iMessage supports longer messages than "
+        "SMS, but keep responses reasonably concise. You can only send text messages "
+        "— media attachments are not currently supported."
+    ),
     "weixin": (
         "You are on Weixin/WeChat. Markdown formatting is supported, so you may use it when "
         "it improves readability, but keep the message compact and chat-friendly. You can send media files natively: "

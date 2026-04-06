@@ -67,6 +67,7 @@ class Platform(Enum):
     WEIXIN = "weixin"
     BLUEBUBBLES = "bluebubbles"
     QQBOT = "qqbot"
+    IMESSAGE = "imessage"
 
 
 @dataclass
@@ -281,6 +282,9 @@ class GatewayConfig:
                 connected.append(platform)
             # WhatsApp uses enabled flag only (bridge handles auth)
             elif platform == Platform.WHATSAPP:
+                connected.append(platform)
+            # iMessage uses enabled flag only (imsg CLI handles auth)
+            elif platform == Platform.IMESSAGE:
                 connected.append(platform)
             # Signal uses extra dict for config (http_url + account)
             elif platform == Platform.SIGNAL and config.extra.get("http_url"):
@@ -968,6 +972,20 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
             platform=Platform.SIGNAL,
             chat_id=signal_home,
             name=os.getenv("SIGNAL_HOME_CHANNEL_NAME", "Home"),
+        )
+    
+    # iMessage (macOS only - uses imsg CLI)
+    imessage_enabled = os.getenv("IMESSAGE_ENABLED", "").lower() in ("true", "1", "yes")
+    if imessage_enabled or os.getenv("IMESSAGE_ALLOWED_USERS"):
+        if Platform.IMESSAGE not in config.platforms:
+            config.platforms[Platform.IMESSAGE] = PlatformConfig()
+        config.platforms[Platform.IMESSAGE].enabled = True
+    imessage_home = os.getenv("IMESSAGE_HOME_CHANNEL")
+    if imessage_home and Platform.IMESSAGE in config.platforms:
+        config.platforms[Platform.IMESSAGE].home_channel = HomeChannel(
+            platform=Platform.IMESSAGE,
+            chat_id=imessage_home,
+            name=os.getenv("IMESSAGE_HOME_CHANNEL_NAME", "Home"),
         )
 
     # Mattermost
