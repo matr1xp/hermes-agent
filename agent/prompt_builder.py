@@ -333,6 +333,16 @@ PLATFORM_HINTS = {
         "files arrive as downloadable documents. You can also include image "
         "URLs in markdown format ![alt](url) and they will be sent as photos."
     ),
+    "imessage": (
+        "You are on Apple's iMessage text messaging platform. "
+        "Please do not use markdown as it does not render in Messages.app. "
+        "You can send media files natively: include MEDIA:/absolute/path/to/file "
+        "in your response. Images (.png, .jpg, .webp) appear as photos, videos "
+        "(.mp4, .mov) play inline, and other files arrive as downloadable documents. "
+        "You can also include image URLs in markdown format ![alt](url) and they "
+        "will be sent as native photos. Address the sender by their name if known, "
+        "but don't assume — use the context provided to identify who you're talking to."
+    ),
     "email": (
         "You are communicating via email. Write clear, well-structured responses "
         "suitable for email. Use plain text formatting (no markdown). "
