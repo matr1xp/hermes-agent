@@ -240,14 +240,11 @@ class IMessageAdapter(BasePlatformAdapter):
                     m.date,
                     h.id as handle,
                     c.chat_identifier,
-                    c.display_name as chat_display_name,
-                    cnt.first_name,
-                    cnt.last_name
+                    c.display_name as chat_display_name
                 FROM message m
                 LEFT JOIN handle h ON m.handle_id = h.rowid
                 LEFT JOIN chat_message_join cmj ON m.rowid = cmj.message_id
                 LEFT JOIN chat c ON cmj.chat_id = c.rowid
-                LEFT JOIN contact cnt ON h.ROWID = cnt.rowid
                 WHERE m.text IS NOT NULL 
                   AND m.text != ''
                   AND m.is_from_me = 0
@@ -263,15 +260,10 @@ class IMessageAdapter(BasePlatformAdapter):
                 text = row["text"] or ""
                 timestamp = row["date"]  # iMessage timestamp (seconds since 2001)
                 handle = row["handle"] or ""
-                
-                # Build display name from contact info (priority: contact name > chat display > handle)
-                first_name = row["first_name"] or ""
-                last_name = row["last_name"] or ""
                 chat_display_name = row["chat_display_name"] or ""
                 
-                if first_name or last_name:
-                    display_name = f"{first_name} {last_name}".strip()
-                elif chat_display_name:
+                # Build display name (priority: chat display name > handle/phone number)
+                if chat_display_name:
                     display_name = chat_display_name
                 else:
                     display_name = handle or chat_id
