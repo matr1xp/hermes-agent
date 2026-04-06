@@ -367,7 +367,7 @@ class IMessageAdapter(BasePlatformAdapter):
         
         return last_result
     
-    async def send_typing(self, chat_id: str) -> None:
+    async def send_typing(self, chat_id: str, metadata=None) -> None:
         """iMessage doesn't support programmatic typing indicators via imsg."""
         pass
     
