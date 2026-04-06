@@ -138,6 +138,9 @@ class IMessageAdapter(BasePlatformAdapter):
         # Contact cache
         self._contact_cache: Dict[str, str] = {}  # chat_id -> display name
         
+        # SMS-only contacts (detected from chat.db service_name)
+        self._sms_contacts: set = set()
+        
         logger.info("[imessage] Adapter initialized, poll interval: %.1fs", self._poll_interval)
     
     def _parse_allowed_users(self) -> List[str]:
@@ -154,6 +157,37 @@ class IMessageAdapter(BasePlatformAdapter):
         if not self._allowed_users:
             return False
         return chat_id in self._allowed_users
+    
+    def _detect_sms_contact(self, chat_id: str) -> bool:
+        """Check if a contact is SMS-only (not iMessage) by querying chat.db."""
+        try:
+            conn = sqlite3.connect(f"file:{MESSAGES_DB_PATH}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT c.service_name, h.service as handle_service
+                FROM chat c
+                LEFT JOIN chat_handle_join chj ON c.rowid = chj.chat_id
+                LEFT JOIN handle h ON chj.handle_id = h.rowid
+                WHERE c.chat_identifier = ? OR h.id = ?
+                LIMIT 1
+            """, (chat_id, chat_id))
+            
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                service = row["service_name"] or row["handle_service"] or ""
+                is_sms = service.lower() != "imessage"
+                if is_sms:
+                    self._sms_contacts.add(chat_id)
+                return is_sms
+            
+            return False
+        except Exception as e:
+            logger.debug("[imessage] Failed to detect service type for %s: %s", _redact_phone(chat_id), e)
+            return False
     
     def _filter_echo(self, chat_id: str, text: str, timestamp: float) -> bool:
         """Check if this message is an echo of something we just sent."""
@@ -330,14 +364,25 @@ class IMessageAdapter(BasePlatformAdapter):
                 cmd = [imsg_path, "send", "--to", chat_id, "--text", chunk]
                 
                 # Determine service (imessage vs sms)
-                # Default to "auto" to let Messages.app choose (iMessage for Apple devices, SMS for Android)
+                # Check if this is a known SMS-only contact
+                use_service = None
                 if metadata and metadata.get("service") == "sms":
-                    cmd.extend(["--service", "sms"])
+                    use_service = "sms"
                 elif metadata and metadata.get("service") == "imessage":
-                    cmd.extend(["--service", "imessage"])
+                    use_service = "imessage"
+                elif chat_id in self._sms_contacts:
+                    # Known SMS contact
+                    use_service = "sms"
                 else:
-                    # Auto-detect: iMessage for Apple devices, SMS for others
-                    cmd.extend(["--service", "auto"])
+                    # Auto-detect, but check chat.db first
+                    if self._detect_sms_contact(chat_id):
+                        use_service = "sms"
+                        logger.debug("[imessage] Detected SMS-only contact: %s", _redact_phone(chat_id))
+                    else:
+                        use_service = "auto"
+                
+                if use_service:
+                    cmd.extend(["--service", use_service])
                 
                 result = subprocess.run(
                     cmd,
