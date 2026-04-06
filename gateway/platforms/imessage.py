@@ -246,15 +246,21 @@ class IMessageAdapter(BasePlatformAdapter):
                     logger.debug("[imessage] Skipping echo from %s", _redact_phone(chat_id))
                     continue
                 
+                # Build session source
+                source = self.build_source(
+                    chat_id=chat_id,
+                    chat_name=display_name or handle or chat_id,
+                    chat_type="dm",
+                    user_id=handle or chat_id,
+                    user_name=display_name or handle or chat_id,
+                )
+                
                 # Build message event
                 event = MessageEvent(
-                    chat_id=chat_id,
-                    message_type=MessageType.TEXT,
                     text=text,
-                    timestamp=unix_timestamp,
-                    sender_name=display_name or handle or chat_id,
-                    sender_id=handle or chat_id,
-                    is_group=False,  # Could detect groups via chat table
+                    message_type=MessageType.TEXT,
+                    source=source,
+                    message_id=str(row["rowid"]),
                 )
                 
                 # Dispatch to gateway
