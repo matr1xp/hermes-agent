@@ -330,10 +330,14 @@ class IMessageAdapter(BasePlatformAdapter):
                 cmd = [imsg_path, "send", "--to", chat_id, "--text", chunk]
                 
                 # Determine service (imessage vs sms)
+                # Default to "auto" to let Messages.app choose (iMessage for Apple devices, SMS for Android)
                 if metadata and metadata.get("service") == "sms":
                     cmd.extend(["--service", "sms"])
                 elif metadata and metadata.get("service") == "imessage":
                     cmd.extend(["--service", "imessage"])
+                else:
+                    # Auto-detect: iMessage for Apple devices, SMS for others
+                    cmd.extend(["--service", "auto"])
                 
                 result = subprocess.run(
                     cmd,
