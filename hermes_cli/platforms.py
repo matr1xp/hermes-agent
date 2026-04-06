@@ -26,6 +26,8 @@ PLATFORMS: OrderedDict[str, PlatformInfo] = OrderedDict([
     ("whatsapp",       PlatformInfo(label="📱 WhatsApp",        default_toolset="hermes-whatsapp")),
     ("signal",         PlatformInfo(label="📡 Signal",          default_toolset="hermes-signal")),
     ("bluebubbles",    PlatformInfo(label="💙 BlueBubbles",     default_toolset="hermes-bluebubbles")),
+    ("imessage",       PlatformInfo(label="💬 iMessage",        default_toolset="hermes-imessage")),
+    ("sms",            PlatformInfo(label="📱 SMS",             default_toolset="hermes-sms")),
     ("email",          PlatformInfo(label="📧 Email",           default_toolset="hermes-email")),
     ("homeassistant",  PlatformInfo(label="🏠 Home Assistant",  default_toolset="hermes-homeassistant")),
     ("mattermost",     PlatformInfo(label="💬 Mattermost",      default_toolset="hermes-mattermost")),
