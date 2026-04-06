@@ -43,12 +43,35 @@ logger = logging.getLogger(__name__)
 # chat.db location
 MESSAGES_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
 
+# imsg CLI path (Homebrew default location on Apple Silicon)
+# Also check Intel Mac location as fallback
+IMSG_PATHS = [
+    Path("/opt/homebrew/bin/imsg"),  # Apple Silicon
+    Path("/usr/local/bin/imsg"),     # Intel Mac
+]
+
 # Polling configuration
 DEFAULT_POLL_INTERVAL = 2.0  # seconds
 MAX_MESSAGE_LENGTH = 16000  # iMessage supports long messages
 
 # Contact/phone pattern for redaction
 _PHONE_RE = re.compile(r"\+[1-9]\d{6,14}")
+
+
+def _get_imsg_path() -> Optional[str]:
+    """Find the imsg CLI binary, checking common Homebrew locations."""
+    # First try PATH (works in interactive shells)
+    import shutil
+    path = shutil.which("imsg")
+    if path:
+        return path
+    
+    # Then check known Homebrew locations (works in launchd)
+    for imsg_path in IMSG_PATHS:
+        if imsg_path.exists():
+            return str(imsg_path)
+    
+    return None
 
 
 def _redact_phone(phone: str) -> str:
@@ -62,10 +85,10 @@ def _redact_phone(phone: str) -> str:
 
 def check_imessage_requirements() -> bool:
     """Check if iMessage adapter dependencies are available."""
-    # Check imsg CLI exists
-    import shutil
-    if shutil.which("imsg") is None:
-        logger.warning("[imessage] imsg CLI not found in PATH")
+    # Check imsg CLI exists (using full path search for launchd compatibility)
+    imsg_path = _get_imsg_path()
+    if not imsg_path:
+        logger.warning("[imessage] imsg CLI not found in PATH or Homebrew locations")
         return False
     
     # Check chat.db exists
@@ -295,8 +318,9 @@ class IMessageAdapter(BasePlatformAdapter):
         
         for chunk in chunks:
             try:
-                # Use imsg send command
-                cmd = ["imsg", "send", "--to", chat_id, "--text", chunk]
+                # Use imsg send command with full path for launchd compatibility
+                imsg_path = _get_imsg_path() or "imsg"
+                cmd = [imsg_path, "send", "--to", chat_id, "--text", chunk]
                 
                 # Determine service (imessage vs sms)
                 if metadata and metadata.get("service") == "sms":

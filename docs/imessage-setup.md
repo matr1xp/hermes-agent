@@ -175,13 +175,32 @@ Without FDA, `imsg` cannot read `chat.db` and will fail silently or with `permis
 
 **Fix:** Grant FDA to your terminal and restart.
 
-### 2. LaunchAgent/FDA Propagation
+### 2. LaunchAgent/launchd PATH Issues
 
-If running Hermes Gateway as a launchd service, FDA may not propagate correctly.
+When running as a launchd service, the daemon doesn't inherit your shell's PATH, so it may not find Homebrew-installed tools like `imsg`.
 
-**Workaround:** Start the gateway from Terminal.app (which has FDA) rather than as a login item.
+**Symptoms:**
+```
+WARNING [imessage] imsg CLI not found in PATH or Homebrew locations
+```
 
-### 3. Phone Number vs Email Routing
+**Fix:** The adapter now checks common Homebrew locations (`/opt/homebrew/bin` and `/usr/local/bin`) automatically. If you still see this error:
+
+1. Verify imsg location: `which imsg`
+2. If it's in a non-standard location, create a symlink:
+   ```bash
+   sudo ln -s /your/custom/path/imsg /opt/homebrew/bin/imsg
+   ```
+
+**Workaround:** Run the gateway from Terminal.app instead of as a launchd service during testing.
+
+### 3. Full Disk Access Required
+
+Without FDA, `imsg` cannot read `chat.db` and will fail silently or with `permissionDenied` errors.
+
+**Fix:** Grant FDA to your terminal and restart.
+
+### 4. Phone Number vs Email Routing
 
 iMessage can route via phone number OR Apple ID email. The adapter uses the identifier from chat.db, but sending may fail if the recipient prefers a different identifier.
 

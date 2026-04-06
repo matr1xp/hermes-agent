@@ -103,7 +103,10 @@ class TestIMessageRequirements:
         """Should return False if imsg CLI is not installed."""
         monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
 
-        with patch("shutil.which", return_value=None):
+        # Mock shutil.which to return None (not in PATH)
+        # Mock Path.exists to return False for known Homebrew locations
+        with patch("shutil.which", return_value=None), \
+             patch.object(Path, "exists", return_value=False):
             from gateway.platforms.imessage import check_imessage_requirements
             result = check_imessage_requirements()
             assert result is False
