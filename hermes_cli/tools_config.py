@@ -145,12 +145,14 @@ PLATFORMS = {
     "homeassistant": {"label": "🏠 Home Assistant", "default_toolset": "hermes-homeassistant"},
     "email":    {"label": "📧 Email",      "default_toolset": "hermes-email"},
     "matrix":   {"label": "💬 Matrix",     "default_toolset": "hermes-matrix"},
- "dingtalk": {"label": "💬 DingTalk", "default_toolset": "hermes-dingtalk"},
-    "feishu": {"label": "🪽 Feishu", "default_toolset": "hermes-feishu"},
-    "wecom": {"label": "💬 WeCom", "default_toolset": "hermes-wecom"},
+    "dingtalk": {"label": "💬 DingTalk",   "default_toolset": "hermes-dingtalk"},
+    "feishu":   {"label": "🪽 Feishu",     "default_toolset": "hermes-feishu"},
+    "wecom":    {"label": "💬 WeCom",      "default_toolset": "hermes-wecom"},
     "api_server": {"label": "🌐 API Server", "default_toolset": "hermes-api-server"},
     "mattermost": {"label": "💬 Mattermost", "default_toolset": "hermes-mattermost"},
     "webhook": {"label": "🔗 Webhook", "default_toolset": "hermes-webhook"},
+    "sms":      {"label": "📱 SMS",         "default_toolset": "hermes-sms"},
+    "imessage": {"label": "💬 iMessage",   "default_toolset": "hermes-imessage"},
 }
 
 
