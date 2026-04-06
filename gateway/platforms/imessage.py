@@ -38,11 +38,15 @@ from gateway.platforms.base import (
     SendResult,
     cache_image_from_bytes,
 )
+from hermes_constants import get_hermes_home
 
 logger = logging.getLogger(__name__)
 
 # chat.db location
 MESSAGES_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
+
+# Persistent state file for tracking seen messages across restarts
+IMESSAGE_STATE_FILE = get_hermes_home() / "imessage_state.json"
 
 # imsg CLI path (Homebrew default location on Apple Silicon)
 # Also check Intel Mac location as fallback
@@ -141,6 +145,9 @@ class IMessageAdapter(BasePlatformAdapter):
         # SMS-only contacts (detected from chat.db service_name)
         self._sms_contacts: set = set()
         
+        # Load persisted state from previous run
+        self._load_state()
+        
         logger.info("[imessage] Adapter initialized, poll interval: %.1fs", self._poll_interval)
     
     def _parse_allowed_users(self) -> List[str]:
@@ -212,9 +219,18 @@ class IMessageAdapter(BasePlatformAdapter):
         """Poll chat.db for new messages."""
         import sqlite3
         
+        # Persist state every N poll cycles to recover from crashes
+        poll_count = 0
+        SAVE_INTERVAL = 10  # Save every 10 polls (~20 seconds at default 2s interval)
+        
         while self._running:
             try:
                 await self._poll_once()
+                poll_count += 1
+                # Periodic state persistence
+                if poll_count >= SAVE_INTERVAL:
+                    self._save_state()
+                    poll_count = 0
             except Exception as e:
                 logger.error("[imessage] Poll error: %s", e)
             await asyncio.sleep(self._poll_interval)
@@ -348,7 +364,78 @@ class IMessageAdapter(BasePlatformAdapter):
                 pass
             self._poll_task = None
         
+        # Persist state before disconnecting
+        self._save_state()
+        
         logger.info("[imessage] Disconnected")
+    
+    def _load_state(self) -> None:
+        """Load persisted state from previous run."""
+        if not IMESSAGE_STATE_FILE.exists():
+            return
+        
+        try:
+            with open(IMESSAGE_STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            # Restore seen messages (convert dict to SeenMessage objects)
+            for chat_id, msg_data in data.get("seen_messages", {}).items():
+                self._seen_messages[chat_id] = SeenMessage(
+                    row_id=msg_data["row_id"],
+                    timestamp=msg_data.get("timestamp", 0),
+                    text=msg_data.get("text", ""),
+                    is_from_me=msg_data.get("is_from_me", False),
+                )
+            
+            # Restore SMS contacts
+            self._sms_contacts = set(data.get("sms_contacts", []))
+            
+            logger.info("[imessage] Loaded state: %d seen messages, %d SMS contacts",
+                       len(self._seen_messages), len(self._sms_contacts))
+        except Exception as e:
+            logger.warning("[imessage] Failed to load state: %s", e)
+    
+    def _save_state(self) -> None:
+        """Persist state to disk for crash/restart recovery."""
+        try:
+            IMESSAGE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            
+            data = {
+                "seen_messages": {
+                    chat_id: {
+                        "row_id": msg.row_id,
+                        "timestamp": msg.timestamp,
+                        "text": msg.text,
+                        "is_from_me": msg.is_from_me,
+                    }
+                    for chat_id, msg in self._seen_messages.items()
+                },
+                "sms_contacts": list(self._sms_contacts),
+            }
+            
+            # Atomic write
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(IMESSAGE_STATE_FILE.parent),
+                suffix=".tmp",
+                prefix=".imessage_state_",
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, IMESSAGE_STATE_FILE)
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            
+            logger.debug("[imessage] Saved state: %d seen messages", len(self._seen_messages))
+        except Exception as e:
+            logger.warning("[imessage] Failed to save state: %s", e)
     
     async def send(
         self,
