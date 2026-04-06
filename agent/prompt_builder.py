@@ -325,6 +325,12 @@ PLATFORM_HINTS = {
         "only — no markdown, no formatting. SMS messages are limited to ~1600 "
         "characters, so be brief and direct."
     ),
+    "imessage": (
+        "You are communicating via iMessage on macOS. Use plain text — markdown "
+        "formatting does not render properly. iMessage supports longer messages than "
+        "SMS, but keep responses reasonably concise. You can only send text messages "
+        "— media attachments are not currently supported."
+    ),
 }
 
 CONTEXT_FILE_MAX_CHARS = 20_000
