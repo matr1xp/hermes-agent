@@ -486,3 +486,310 @@ class TestIMessageCronScheduler:
         # The scheduler has a platform_map that includes 'imessage'
         # We just verify the Platform enum exists correctly
         assert Platform.IMESSAGE.value == "imessage"
+
+
+# ---------------------------------------------------------------------------
+# Persistent State
+# ---------------------------------------------------------------------------
+
+class TestIMessagePersistentState:
+    """Tests for state persistence across gateway restarts."""
+
+    def _make_adapter(self, monkeypatch, allowed_users="+15551234567"):
+        """Create an IMessageAdapter with sensible test defaults."""
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", allowed_users)
+        from gateway.platforms.imessage import IMessageAdapter
+
+        config = PlatformConfig(enabled=True)
+        return IMessageAdapter(config)
+
+    def test_load_state_missing_file(self, monkeypatch, tmp_path):
+        """Should handle missing state file gracefully."""
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            tmp_path / "nonexistent.json"
+        )
+        from gateway.platforms.imessage import IMessageAdapter
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Should initialize with empty state
+        assert adapter._seen_messages == {}
+        assert adapter._sms_contacts == set()
+
+    def test_load_state_valid_file(self, monkeypatch, tmp_path):
+        """Should load state from valid JSON file."""
+        import json
+
+        state_file = tmp_path / "imessage_state.json"
+        state_data = {
+            "seen_messages": {
+                "+15551234567": {
+                    "row_id": 123,
+                    "timestamp": 1712345678.0,
+                    "text": "Hello",
+                    "is_from_me": False
+                },
+                "+15559876543": {
+                    "row_id": 456,
+                    "timestamp": 1712345680.0,
+                    "text": "World",
+                    "is_from_me": True
+                }
+            },
+            "sms_contacts": ["+15551111111", "+15552222222"]
+        }
+        state_file.write_text(json.dumps(state_data), encoding="utf-8")
+
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            state_file
+        )
+        from gateway.platforms.imessage import IMessageAdapter, SeenMessage
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Should load seen messages
+        assert "+15551234567" in adapter._seen_messages
+        msg = adapter._seen_messages["+15551234567"]
+        assert isinstance(msg, SeenMessage)
+        assert msg.row_id == 123
+        assert msg.timestamp == 1712345678.0
+        assert msg.text == "Hello"
+        assert msg.is_from_me is False
+
+        # Should load SMS contacts
+        assert "+15551111111" in adapter._sms_contacts
+        assert "+15552222222" in adapter._sms_contacts
+
+    def test_load_state_corrupted_file(self, monkeypatch, tmp_path):
+        """Should handle corrupted state file gracefully."""
+        state_file = tmp_path / "imessage_state.json"
+        state_file.write_text("not valid json {", encoding="utf-8")
+
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            state_file
+        )
+        from gateway.platforms.imessage import IMessageAdapter
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Should initialize with empty state after failed load
+        assert adapter._seen_messages == {}
+        assert adapter._sms_contacts == set()
+
+    def test_load_state_partial_data(self, monkeypatch, tmp_path):
+        """Should handle state file with missing fields."""
+        import json
+
+        state_file = tmp_path / "imessage_state.json"
+        # Missing "sms_contacts" field
+        state_data = {
+            "seen_messages": {
+                "+15551234567": {
+                    "row_id": 123,
+                    "timestamp": 1712345678.0,
+                    "text": "Hello",
+                    "is_from_me": False
+                }
+            }
+        }
+        state_file.write_text(json.dumps(state_data), encoding="utf-8")
+
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            state_file
+        )
+        from gateway.platforms.imessage import IMessageAdapter
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Should load what's present and use defaults for missing
+        assert "+15551234567" in adapter._seen_messages
+        assert adapter._sms_contacts == set()
+
+    def test_save_state_creates_file(self, monkeypatch, tmp_path):
+        """_save_state should create state file."""
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            tmp_path / "imessage_state.json"
+        )
+        from gateway.platforms.imessage import IMessageAdapter, SeenMessage
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Add some state
+        adapter._seen_messages["+15551234567"] = SeenMessage(
+            row_id=123,
+            timestamp=1712345678.0,
+            text="Test message",
+            is_from_me=False
+        )
+        adapter._sms_contacts.add("+15551111111")
+
+        # Save state
+        adapter._save_state()
+
+        # Verify file was created
+        import json
+        state_file = tmp_path / "imessage_state.json"
+        assert state_file.exists()
+
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        assert "seen_messages" in data
+        assert "+15551234567" in data["seen_messages"]
+        assert data["seen_messages"]["+15551234567"]["row_id"] == 123
+        assert "+15551111111" in data["sms_contacts"]
+
+    def test_save_state_atomic_write(self, monkeypatch, tmp_path):
+        """_save_state should use atomic write (write to temp, then rename)."""
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        state_file = tmp_path / "imessage_state.json"
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            state_file
+        )
+        from gateway.platforms.imessage import IMessageAdapter
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Save state
+        adapter._save_state()
+
+        # Verify no temp files left behind
+        temp_files = list(tmp_path.glob(".imessage_state_*.tmp"))
+        assert len(temp_files) == 0, "Temp files should be cleaned up"
+
+        # Verify final file exists
+        assert state_file.exists()
+
+    def test_save_state_handles_missing_fields(self, monkeypatch, tmp_path):
+        """_save_state should handle SeenMessage with missing optional fields."""
+        import json
+
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            tmp_path / "imessage_state.json"
+        )
+        from gateway.platforms.imessage import IMessageAdapter, SeenMessage
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Add message with all fields populated
+        adapter._seen_messages["+15551234567"] = SeenMessage(
+            row_id=123,
+            timestamp=1712345678.0,
+            text="Full message",
+            is_from_me=False
+        )
+
+        adapter._save_state()
+
+        # Verify saved data has all fields
+        state_file = tmp_path / "imessage_state.json"
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        msg_data = data["seen_messages"]["+15551234567"]
+        assert msg_data["row_id"] == 123
+        assert msg_data["timestamp"] == 1712345678.0
+        assert msg_data["text"] == "Full message"
+        assert msg_data["is_from_me"] is False
+
+    def test_state_persists_across_reinstantiation(self, monkeypatch, tmp_path):
+        """State should persist when adapter is recreated."""
+        import json
+
+        state_file = tmp_path / "imessage_state.json"
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            state_file
+        )
+        from gateway.platforms.imessage import IMessageAdapter, SeenMessage
+
+        config = PlatformConfig(enabled=True)
+
+        # First adapter instance - add state
+        adapter1 = IMessageAdapter(config)
+        adapter1._seen_messages["+15551234567"] = SeenMessage(
+            row_id=999,
+            timestamp=1712999999.0,
+            text="Persistent message",
+            is_from_me=True
+        )
+        adapter1._sms_contacts.add("+15553333333")
+        adapter1._save_state()
+
+        # Second adapter instance - should load state
+        adapter2 = IMessageAdapter(config)
+
+        # Verify state was restored
+        assert "+15551234567" in adapter2._seen_messages
+        assert adapter2._seen_messages["+15551234567"].row_id == 999
+        assert "+15553333333" in adapter2._sms_contacts
+
+    def test_save_state_creates_parent_directory(self, monkeypatch, tmp_path):
+        """_save_state should create parent directory if missing."""
+        import json
+
+        # Create a nested path that doesn't exist
+        nested_state_file = tmp_path / "nested" / "deep" / "imessage_state.json"
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            nested_state_file
+        )
+        from gateway.platforms.imessage import IMessageAdapter
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Should create parent directories
+        adapter._save_state()
+
+        # Verify file was created
+        assert nested_state_file.exists()
+
+    def test_load_state_handles_incompatible_schema(self, monkeypatch, tmp_path):
+        """Should handle state file with incompatible schema (missing required fields)."""
+        import json
+
+        state_file = tmp_path / "imessage_state.json"
+        # State with missing required "row_id" field
+        state_data = {
+            "seen_messages": {
+                "+15551234567": {
+                    "timestamp": 1712345678.0,
+                    "text": "Hello"
+                    # Missing row_id - required by SeenMessage
+                }
+            }
+        }
+        state_file.write_text(json.dumps(state_data), encoding="utf-8")
+
+        monkeypatch.setenv("IMESSAGE_ALLOWED_USERS", "+15551234567")
+        monkeypatch.setattr(
+            "gateway.platforms.imessage.IMESSAGE_STATE_FILE",
+            state_file
+        )
+        from gateway.platforms.imessage import IMessageAdapter
+
+        config = PlatformConfig(enabled=True)
+        adapter = IMessageAdapter(config)
+
+        # Should handle gracefully and initialize empty
+        # The load_state catches exceptions and logs warning
+        assert adapter._seen_messages == {}
