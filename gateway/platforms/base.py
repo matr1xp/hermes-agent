@@ -681,6 +681,114 @@ def cache_video_from_bytes(data: bytes, ext: str = ".mp4") -> str:
 
 
 # ---------------------------------------------------------------------------
+# Video cache utilities
+#
+# Same pattern as image/audio/video cache -- video files from platforms are
+# downloaded here so downstream tools (vision, transcription) can access them.
+# ---------------------------------------------------------------------------
+
+VIDEO_CACHE_DIR = get_hermes_dir("cache/videos", "video_cache")
+
+
+def get_video_cache_dir() -> Path:
+    """Return the video cache directory, creating it if it doesn't exist."""
+    VIDEO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    return VIDEO_CACHE_DIR
+
+
+def cache_video_from_bytes(data: bytes, ext: str = ".mp4") -> str:
+    """
+    Save raw video bytes to the cache and return the absolute file path.
+
+    Args:
+        data: Raw video bytes.
+        ext:  File extension including the dot (e.g. ".mp4", ".webm").
+
+    Returns:
+        Absolute path to the cached video file as a string.
+    """
+    cache_dir = get_video_cache_dir()
+    filename = f"video_{uuid.uuid4().hex[:12]}{ext}"
+    filepath = cache_dir / filename
+    filepath.write_bytes(data)
+    return str(filepath)
+
+
+async def cache_video_from_url(url: str, ext: str = ".mp4", retries: int = 2) -> str:
+    """
+    Download a video file from a URL and save it to the local cache.
+
+    Retries on transient failures (timeouts, 429, 5xx) with exponential
+    backoff so a single slow CDN response doesn't lose the media.
+
+    Args:
+        url: The HTTP/HTTPS URL to download from.
+        ext: File extension including the dot (e.g. ".mp4", ".webm").
+        retries: Number of retry attempts on transient failures.
+
+    Returns:
+        Absolute path to the cached video file as a string.
+    """
+    import asyncio
+    import httpx
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    last_exc = None
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        for attempt in range(retries + 1):
+            try:
+                response = await client.get(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (compatible; HermesAgent/1.0)",
+                        "Accept": "video/*,*/*;q=0.8",
+                    },
+                )
+                response.raise_for_status()
+                return cache_video_from_bytes(response.content, ext)
+            except (httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+                last_exc = exc
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 429:
+                    raise
+                if attempt < retries:
+                    wait = 1.5 * (attempt + 1)
+                    _log.debug(
+                        "Video cache retry %d/%d for %s (%.1fs): %s",
+                        attempt + 1,
+                        retries,
+                        _safe_url_for_log(url),
+                        wait,
+                        exc,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+    raise last_exc
+
+
+def cleanup_video_cache(max_age_hours: int = 24) -> int:
+    """
+    Delete cached videos older than *max_age_hours*.
+
+    Returns the number of files removed.
+    """
+    import time
+
+    cache_dir = get_video_cache_dir()
+    cutoff = time.time() - (max_age_hours * 3600)
+    removed = 0
+    for f in cache_dir.iterdir():
+        if f.is_file() and f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass
+    return removed
+
+
+# ---------------------------------------------------------------------------
 # Document cache utilities
 #
 # Same pattern as image/audio cache -- documents from platforms are downloaded
