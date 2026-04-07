@@ -52,6 +52,7 @@ from gateway.platforms.base import (
     SendResult,
     cache_image_from_url,
     cache_audio_from_url,
+    cache_video_from_url,
     cache_document_from_bytes,
     SUPPORTED_DOCUMENT_TYPES,
 )
@@ -2262,6 +2263,19 @@ class DiscordAdapter(BasePlatformAdapter):
                     print(f"[Discord] Cached user audio: {cached_path}", flush=True)
                 except Exception as e:
                     print(f"[Discord] Failed to cache audio attachment: {e}", flush=True)
+                    media_urls.append(att.url)
+                    media_types.append(content_type)
+            elif content_type.startswith("video/"):
+                try:
+                    ext = "." + content_type.split("/")[-1].split(";")[0]
+                    if ext not in (".mp4", ".mov", ".avi", ".webm", ".mkv"):
+                        ext = ".mp4"
+                    cached_path = await cache_video_from_url(att.url, ext=ext)
+                    media_urls.append(cached_path)
+                    media_types.append(content_type)
+                    print(f"[Discord] Cached user video: {cached_path}", flush=True)
+                except Exception as e:
+                    print(f"[Discord] Failed to cache video attachment: {e}", flush=True)
                     media_urls.append(att.url)
                     media_types.append(content_type)
             else:
