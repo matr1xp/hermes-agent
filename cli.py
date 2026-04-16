@@ -8704,10 +8704,10 @@ class HermesCLI:
                     pass
                 elif self.use_glow:
                     # Render response through glow for beautiful Markdown formatting
-                    _cprint(f"\n{_GOLD}╭─{label}{'─' * (shutil.get_terminal_size().columns - 2 - len(label))}╮{_RST}")
+                    _cprint(f"\n{_ACCENT}╭─{label}{'─' * (shutil.get_terminal_size().columns - 2 - len(label))}╮{_RST}")
                     rendered = _render_markdown_with_glow(response)
                     _cprint(rendered)
-                    _cprint(f"{_GOLD}╰{'─' * (shutil.get_terminal_size().columns - 2)}╯{_RST}")
+                    _cprint(f"{_ACCENT}╰{'─' * (shutil.get_terminal_size().columns - 2)}╯{_RST}")
                 else:
                     _chat_console = ChatConsole()
                     _chat_console.print(Panel(
