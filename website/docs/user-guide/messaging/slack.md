@@ -347,6 +347,14 @@ slack:
   # but you can set this explicitly for consistency with other platforms)
   require_mention: true
 
+  # Prevent thread auto-engagement: only reply to channel messages that
+  # contain an explicit @mention. With this OFF (default), Slack can
+  # "auto-engage" — remembering past mentions in a thread and following
+  # up on bot-message replies, and resuming active sessions without a
+  # fresh mention. With strict_mention ON, every new channel message
+  # must @mention the bot before Hermes will respond.
+  strict_mention: false
+
   # Custom mention patterns that trigger the bot
   # (in addition to the default @mention detection)
   mention_patterns:
@@ -356,6 +364,10 @@ slack:
   # Text prepended to every outgoing message
   reply_prefix: ""
 ```
+
+:::tip When to use `strict_mention`
+Set this to `true` in busy workspaces where Slack's default "the bot remembers this thread" behavior surprises users — for example, a long tech-support thread where the bot helped at the start and you'd rather it stay silent unless explicitly pinged again. DMs and active interactive sessions are unaffected.
+:::
 
 :::info
 Slack supports both patterns: `@mention` required to start a conversation by default, but you can opt specific channels out via `SLACK_FREE_RESPONSE_CHANNELS` (comma-separated channel IDs) or `slack.free_response_channels` in `config.yaml`. Once the bot has an active session in a thread, subsequent thread replies do not require a mention. In DMs the bot always responds without needing a mention.
@@ -509,6 +521,34 @@ slack:
 ```
 
 Keys are Slack channel IDs (find them via channel details → "About" → scroll to bottom). All messages in the matching channel get the prompt injected as an ephemeral system instruction.
+
+## Per-Channel Skill Bindings
+
+Auto-load a skill whenever a new session starts in a specific channel or DM. Unlike per-channel prompts (which are injected on every turn), skill bindings inject the skill content as a user message at **session start** — it becomes part of the conversation history and does not need to be reloaded on subsequent turns.
+
+This is ideal for DMs or channels with a dedicated purpose (flashcards, a domain-specific Q&A bot, a support triage channel, etc.) where you don't want the model's own skill selector to decide whether to load on every short reply.
+
+```yaml
+slack:
+  channel_skill_bindings:
+    # DM channel — always runs in "german-flashcards" mode
+    - id: "D0ATH9TQ0G6"
+      skills:
+        - german-flashcards
+    # Research channel — preload multiple skills in order
+    - id: "C01RESEARCH"
+      skills:
+        - arxiv
+        - writing-plans
+    # Short form: single skill as a string
+    - id: "C02SUPPORT"
+      skill: hubspot-on-demand
+```
+
+Notes:
+- The binding matches by channel ID. For threaded messages in a bound channel, the thread inherits the parent channel's binding.
+- The skill is loaded only at session start (new session or after auto-reset). If you change the binding, run `/new` or wait for the session to auto-reset for it to take effect.
+- Combine with `channel_prompts` for per-channel tone/constraints on top of the skill's instructions.
 
 ## Troubleshooting
 

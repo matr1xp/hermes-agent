@@ -81,63 +81,84 @@ class TestStdioPidTracking:
 
     def test_kill_orphaned_noop_when_empty(self):
         """_kill_orphaned_mcp_children does nothing when no PIDs tracked."""
-        from tools.mcp_tool import _kill_orphaned_mcp_children, _stdio_pids, _lock
+        from tools.mcp_tool import (
+            _kill_orphaned_mcp_children,
+            _orphan_stdio_pids,
+            _stdio_pids,
+            _lock,
+        )
 
         with _lock:
             _stdio_pids.clear()
+            _orphan_stdio_pids.clear()
 
         # Should not raise
         _kill_orphaned_mcp_children()
 
     def test_kill_orphaned_handles_dead_pids(self):
         """_kill_orphaned_mcp_children gracefully handles already-dead PIDs."""
-        from tools.mcp_tool import _kill_orphaned_mcp_children, _stdio_pids, _lock
+        from tools.mcp_tool import (
+            _kill_orphaned_mcp_children,
+            _orphan_stdio_pids,
+            _lock,
+        )
 
         # Use a PID that definitely doesn't exist
         fake_pid = 999999999
         with _lock:
-            _stdio_pids[fake_pid] = "test"
+            _orphan_stdio_pids.add(fake_pid)
 
         # Should not raise (ProcessLookupError is caught)
         _kill_orphaned_mcp_children()
 
         with _lock:
-            assert fake_pid not in _stdio_pids
+            assert fake_pid not in _orphan_stdio_pids
 
     def test_kill_orphaned_uses_sigkill_when_available(self, monkeypatch):
         """SIGTERM-first then SIGKILL after 2s for orphan cleanup."""
-        from tools.mcp_tool import _kill_orphaned_mcp_children, _stdio_pids, _lock
+        from tools.mcp_tool import (
+            _kill_orphaned_mcp_children,
+            _orphan_stdio_pids,
+            _lock,
+        )
 
         fake_pid = 424242
         with _lock:
-            _stdio_pids.clear()
-            _stdio_pids[fake_pid] = "test"
+            _orphan_stdio_pids.clear()
+            _orphan_stdio_pids.add(fake_pid)
 
         fake_sigkill = 9
         monkeypatch.setattr(signal, "SIGKILL", fake_sigkill, raising=False)
 
+        # Post-#21561 the alive check routes through
+        # ``gateway.status._pid_exists`` (so it's safe on Windows — see
+        # bpo-14484). Return True so the SIGKILL escalation fires.
         with patch("tools.mcp_tool.os.kill") as mock_kill, \
+             patch("gateway.status._pid_exists", return_value=True), \
              patch("time.sleep") as mock_sleep:
             _kill_orphaned_mcp_children()
 
-        # SIGTERM, then alive-check (signal 0), then SIGKILL
+        # SIGTERM then SIGKILL; the alive check no longer touches os.kill.
         mock_kill.assert_any_call(fake_pid, signal.SIGTERM)
-        mock_kill.assert_any_call(fake_pid, 0)  # alive check
         mock_kill.assert_any_call(fake_pid, fake_sigkill)
-        assert mock_kill.call_count == 3
+        assert mock_kill.call_count == 2
         mock_sleep.assert_called_once_with(2)
 
         with _lock:
-            assert fake_pid not in _stdio_pids
+            assert fake_pid not in _orphan_stdio_pids
 
     def test_kill_orphaned_falls_back_without_sigkill(self, monkeypatch):
         """Without SIGKILL, SIGTERM is used for both phases."""
-        from tools.mcp_tool import _kill_orphaned_mcp_children, _stdio_pids, _lock
+        from tools.mcp_tool import (
+            _kill_orphaned_mcp_children,
+            _orphan_stdio_pids,
+            _lock,
+        )
 
         fake_pid = 434343
         with _lock:
-            _stdio_pids.clear()
-            _stdio_pids[fake_pid] = "test"
+            _orphan_stdio_pids.clear()
+            _orphan_stdio_pids.add(fake_pid)
 
         monkeypatch.delattr(signal, "SIGKILL", raising=False)
 
@@ -150,7 +171,7 @@ class TestStdioPidTracking:
         assert mock_sleep.called
 
         with _lock:
-            assert fake_pid not in _stdio_pids
+            assert fake_pid not in _orphan_stdio_pids
 
 
 # ---------------------------------------------------------------------------

@@ -60,6 +60,16 @@ _HERMES_CORE_TOOLS = [
     "send_message",
     # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
     "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
+    # Kanban multi-agent coordination — only in schema when the agent is
+    # spawned as a kanban worker (HERMES_KANBAN_TASK env set) or the current
+    # profile explicitly enables the kanban toolset. Gated via check_fn in
+    # tools/kanban_tools.py.
+    "kanban_show", "kanban_list",
+    "kanban_complete", "kanban_block", "kanban_heartbeat",
+    "kanban_comment", "kanban_create", "kanban_link",
+    "kanban_unblock",
+    # Computer use (macOS, gated on cua-driver being installed via check_fn)
+    "computer_use",
 ]
 
 
@@ -84,13 +94,29 @@ TOOLSETS = {
         "tools": ["vision_analyze"],
         "includes": []
     },
+
+    "video": {
+        "description": "Video analysis and understanding tools (opt-in, not in default toolset)",
+        "tools": ["video_analyze"],
+        "includes": []
+    },
     
     "image_gen": {
         "description": "Creative generation tools (images)",
         "tools": ["image_generate"],
         "includes": []
     },
-    
+
+    "computer_use": {
+        "description": (
+            "Background macOS desktop control via cua-driver — screenshots, "
+            "mouse, keyboard, scroll, drag. Does NOT steal the user's cursor "
+            "or keyboard focus. Works with any tool-capable model."
+        ),
+        "tools": ["computer_use"],
+        "includes": []
+    },
+
     "terminal": {
         "description": "Terminal/command execution and process management tools",
         "tools": ["terminal", "process"],
@@ -202,6 +228,25 @@ TOOLSETS = {
         "includes": []
     },
 
+    "kanban": {
+        "description": (
+            "Kanban multi-agent coordination — only active when the agent "
+            "is spawned by the kanban dispatcher (HERMES_KANBAN_TASK env "
+            "set). The dispatcher runs inside the gateway by default; see "
+            "`kanban.dispatch_in_gateway` in config.yaml. Lets workers mark "
+            "tasks done with structured handoffs, block for human input, "
+            "heartbeat during long ops, comment on threads, and (for "
+            "orchestrators) list, unblock, and fan out tasks."
+        ),
+        "tools": [
+            "kanban_show", "kanban_list", "kanban_complete", "kanban_block",
+            "kanban_heartbeat", "kanban_comment",
+            "kanban_create", "kanban_link",
+            "kanban_unblock",
+        ],
+        "includes": [],
+    },
+
     "discord": {
         "description": "Discord read and participate tools (fetch messages, search members, create threads)",
         "tools": ["discord"],
@@ -212,6 +257,18 @@ TOOLSETS = {
         "description": "Discord server management (list channels/roles, pin messages, assign roles)",
         "tools": ["discord_admin"],
         "includes": [],
+    },
+
+    "yuanbao": {
+        "description": "Yuanbao platform tools - group info, member queries, DM, stickers",
+        "tools": [
+            "yb_query_group_info",
+            "yb_query_group_members",
+            "yb_send_dm",
+            "yb_search_sticker",
+            "yb_send_sticker",
+        ],
+        "includes": []
     },
 
     "feishu_doc": {
@@ -356,12 +413,6 @@ TOOLSETS = {
         "includes": []
     },
     
-    "hermes-imessage": {
-        "description": "iMessage bot toolset - macOS Messages.app integration (full access)",
-        "tools": _HERMES_CORE_TOOLS,
-        "includes": []
-    },
-    
     "hermes-signal": {
         "description": "Signal bot toolset - encrypted messaging platform (full access)",
         "tools": _HERMES_CORE_TOOLS,
@@ -440,6 +491,19 @@ TOOLSETS = {
         "includes": []
     },
 
+    "hermes-yuanbao": {
+        "description": "Yuanbao Bot 元宝消息平台工具集 - 群信息、成员查询、私聊、贴纸表情",
+        "tools": _HERMES_CORE_TOOLS + [
+            "yb_query_group_info",
+            "yb_query_group_members",
+            "yb_send_dm",
+            "yb_search_sticker",
+            "yb_send_sticker",
+        ],
+        "module": "tools.yuanbao_tools",
+        "includes": []
+    },
+
     "hermes-sms": {
         "description": "SMS bot toolset - interact with Hermes via SMS (Twilio)",
         "tools": _HERMES_CORE_TOOLS,
@@ -455,7 +519,7 @@ TOOLSETS = {
     "hermes-gateway": {
         "description": "Gateway toolset - union of all messaging platform tools",
         "tools": [],
-        "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-imessage", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook"]
+        "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook", "hermes-yuanbao"]
     }
 }
 
@@ -473,13 +537,18 @@ def get_toolset(name: str) -> Optional[Dict[str, Any]]:
         None: If toolset not found
     """
     toolset = TOOLSETS.get(name)
-    if toolset:
-        return toolset
 
     try:
         from tools.registry import registry
     except Exception:
-        return None
+        return toolset if toolset else None
+
+    if toolset:
+        merged_tools = sorted(
+            set(toolset.get("tools", []))
+            | set(registry.get_tool_names_for_toolset(name))
+        )
+        return {**toolset, "tools": merged_tools}
 
     registry_toolset = name
     description = f"Plugin toolset: {name}"
@@ -545,6 +614,27 @@ def resolve_toolset(name: str, visited: Set[str] = None) -> List[str]:
     # Get toolset definition
     toolset = get_toolset(name)
     if not toolset:
+        # Auto-generate a toolset for plugin platforms (hermes-<name>).
+        # Gives them _HERMES_CORE_TOOLS plus any tools the plugin registered
+        # into a toolset matching the platform name.
+        if name.startswith("hermes-"):
+            platform_name = name[len("hermes-"):]
+            try:
+                from gateway.platform_registry import platform_registry
+                if platform_registry.is_registered(platform_name):
+                    plugin_tools = set(_HERMES_CORE_TOOLS)
+                    try:
+                        from tools.registry import registry
+                        plugin_tools.update(
+                            e.name for e in registry._tools.values()
+                            if e.toolset == platform_name
+                        )
+                    except Exception:
+                        pass
+                    return list(plugin_tools)
+            except Exception:
+                pass
+
         return []
 
     # Collect direct tools
