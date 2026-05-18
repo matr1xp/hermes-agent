@@ -538,10 +538,13 @@ class WhatsAppAdapter(BasePlatformAdapter):
                             bridge_status = data.get("status", "unknown")
                             if bridge_status == "connected":
                                 print(f"[{self.name}] Using existing bridge (status: {bridge_status})")
-                                # Extract bot JID from health endpoint for mention checking
+                                # Extract bot JID and LID from health endpoint for mention checking
                                 if data.get("botJid"):
                                     self._bot_jid = data["botJid"]
                                     print(f"[{self.name}] Bot JID: {self._bot_jid}")
+                                if data.get("botLid"):
+                                    self._bot_lid = data["botLid"]
+                                    print(f"[{self.name}] Bot LID: {self._bot_lid}")
                                 self._mark_connected()
                                 self._bridge_process = None  # Not managed by us
                                 self._http_session = aiohttp.ClientSession()
