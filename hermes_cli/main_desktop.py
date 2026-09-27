@@ -717,7 +717,10 @@ def _desktop_macos_relaunchable_fixup(
         return False
     if _desktop_macos_has_valid_real_signature(app):
         return True
-    subprocess.run(["xattr", "-cr", str(app)], check=False)
+    # Absolute path: a PATH-shadowing `xattr` (conda/pyenv pip shim of the
+    # python `xattr` package, which has no -c/-r and exits 0 printing usage)
+    # silently skips the quarantine clear that keeps TCC grants stable.
+    subprocess.run(["/usr/bin/xattr", "-cr", str(app)], check=False)
     identity = _desktop_macos_local_signing_identity() or "-"
     try:
         if _desktop_macos_local_codesign(app, desktop_dir=desktop_dir, identity=identity):
