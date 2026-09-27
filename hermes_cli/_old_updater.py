@@ -17,6 +17,30 @@ from typing import Any, NoReturn
 
 _result: int | None = None
 
+# Where `hermes update` begins (UPDATE_ENTRYPOINTS in scripts/audit-old-updater-imports.py) and the
+# modules that defined those names. `hermes plugins update` / `hermes pm update` share the name
+# `cmd_update` but never swap the checkout under a running interpreter.
+_UPDATE_ENTRYPOINTS = frozenset({"cmd_update", "_cmd_update_impl", "_update_via_zip", "_run_update_phase_inline"})
+_UPDATE_MODULES = frozenset({"hermes_cli.main", "hermes_cli.update_cmd", "hermes_cli.update_cmd_zip"})
+
+
+def update_on_stack() -> bool:
+    """True when the calling thread runs beneath a `hermes update` entrypoint.
+
+    Separates an updater that retained old modules from a live process reaching
+    the same retired name: out-of-tree plugins still import some of them at runtime.
+    """
+    frame = sys._getframe(1)
+    try:
+        while frame is not None:
+            if (frame.f_code.co_name in _UPDATE_ENTRYPOINTS
+                    and frame.f_globals.get("__name__") in _UPDATE_MODULES):
+                return True
+            frame = frame.f_back
+    finally:
+        del frame
+    return False
+
 
 def _historical_context() -> tuple[dict, list[dict], Any]:
     """Carry data already held by old frames, without importing their modules.
